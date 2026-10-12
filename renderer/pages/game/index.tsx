@@ -53,7 +53,7 @@ const GamePage: NextPage = () => {
     </style>
     <div style={{ width: "100vw", height: "100vh", backgroundColor: "#333333" }}>
       <p style={{ paddingLeft: 160, paddingTop: 15 }}>
-        Hold top left button for {!!delay ? <b>{timeLeft.toFixed(1)}</b> : " 5 "} seconds to go return to game selection screen
+        Hold top left button for {delay ? <b>{(timeLeft/1000).toFixed(1)}</b> : " 5 "} seconds to go return to game selection screen
       </p>
 
       {embed ? (
