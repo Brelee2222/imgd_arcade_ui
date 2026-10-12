@@ -9,6 +9,33 @@ import { db } from '../lib/fb';
 import { useRouter } from 'next/router';
 import { collection, getDocs, query } from 'firebase/firestore';
 
+const 
+    COLUMN_SIZE = 3,
+    SCROLL_HOME_DELAY = 30000,
+    GAME_PAD_KEYBINDS = {
+        // Arrow Keys (up and down end up scrolling the page as well)
+        "left": { keyCode: "ArrowLeft" },
+        "right": { keyCode: "ArrowRight" },
+        "up": { keyCode: "ArrowUp" },
+        "down": { keyCode: "ArrowDown" },
+
+        // WASD
+        "a": { keyCode: "a" },
+        "d": { keyCode: "d" },
+        "w": { keyCode: "w" },
+        "s": { keyCode: "s" },
+
+        // Joystick Axes
+        "ax": { analogAxis: 0 },
+        "ay": { analogAxis: 1 },
+
+        // Buttons
+        "home": { keyCode: "Escape", buttonIndex: 11 },
+        "j": { keyCode: "j", buttonIndex: 3 },
+        "k": { keyCode: "k", buttonIndex: 4 },
+        "l": { keyCode: "l", buttonIndex: 1 },
+    };
+
 const isProd: boolean = process.env.NODE_ENV === 'production';
 
 const Root = styled('div')(({ theme }) => {
@@ -26,16 +53,27 @@ const gameUrl = (game: any) => {
 }
 
 function Home() {
-    const router = useRouter();
-    const [open, setOpen] = React.useState(false);
+    // const router = useRouter();
+    // const handleClose = () => setOpen(false);
+    // const handleClick = () => setOpen(true);
+    // const [open, setOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
-    const handleClose = () => setOpen(false);
-    const handleClick = () => setOpen(true);
-    const [games, setGames] = useState([]);
     const [selectedGame, setSelectedGame] = useState(null);
+    const [games, setGames] = useState([]);
     const [evt, setEvt] = useState({ key: "", value: -1 });
 
-    const fetchGames = async () => {
+    // After document initialization
+    useEffect(() => {
+        window.addEventListener("scrollend", resetScrollHomeTimer);
+        fetchGames();
+    }, []);
+
+    useEffect(onGamesChanged, [games.length]); // Game change
+    useEffect(onInputEvent, [evt]); // Input Event Handling
+
+    useInput(GAME_PAD_KEYBINDS, onGamePadEvent, true);// Game-Pad Event
+
+    async function fetchGames() {
         setLoading(true);
         try {
             const q = query(collection(db, "/games"));
@@ -47,81 +85,81 @@ function Home() {
         }
     }
 
-    useEffect(() => {
-        fetchGames();
-    }, []);
+    function selectGame(game: any | number) {
+        // Turn to a game if it is an index value
+        if(typeof game === "number")
+            game = games[((game % games.length) + games.length) % games.length]; // Mods to a positive number
 
-    useEffect(() => {
+        setSelectedGame(game);
+
+        try { document.getElementById(`game-${game.embed}`).focus(); }
+        catch (e) { console.error(e); }
+        finally { resetScrollHomeTimer(); }
+    }
+
+    let scrollHomeTime: number = -1;
+    function resetScrollHomeTimer() {
+        clearTimeout(scrollHomeTime);
+
+        scrollHomeTime = window.setTimeout(
+            window.scrollTo,
+            SCROLL_HOME_DELAY,
+            { top: 0, behavior: "smooth" }
+        );
+    };
+
+
+    //// Event Handlers ////
+    function onGamesChanged() {
         if (games.length > 0) return;
 
-        const intervalId = setInterval(() => {
-            fetchGames();
-        }, 15000);
+        const intervalId = setInterval(fetchGames, 15000);
 
         return () => clearInterval(intervalId);
-    }, [games.length]);
+    }
 
-    const selectGame = (game) => {
-        setSelectedGame(game);
-        try {
-            document.getElementById(`game-${game.embed}`).focus();
-        } catch (e) {
-            console.error(e);
+    function onInputEvent() {        
+        const gameIndex = selectedGame ? games.indexOf(selectedGame) : 0;
+
+        const keyValue = `${evt.key} ${evt.value}`
+
+        switch (keyValue) {
+            case "l 1":
+            case "k 1":
+                if(selectedGame)
+                    window.location.href = gameUrl(selectedGame);
+                break;
+
+            case "down 1":
+            case "s 1":
+            case "ay 1":
+                selectGame(gameIndex + COLUMN_SIZE);
+                break;
+
+            case "right 1":
+            case "d 1":
+            case "ax 1":
+                selectGame(gameIndex + 1);
+                break;
+
+            case "left 1":
+            case "a 1":
+            case "ax -1":
+                selectGame(gameIndex - 1);
+                break;
+
+            case "up 1":
+            case "w 1":
+            case "ay -1":
+                selectGame(gameIndex - COLUMN_SIZE);
+                break;
         }
     }
 
-    useEffect(() => {
-        // Button down
-        if (Math.abs(evt.value) == 1) {
-            if ((evt.key == "k" || evt.key == "l") && !!selectedGame) {
-                window.location.href = gameUrl(selectedGame);
-            } else if (evt.key == "down" || (evt.key == "ay" && evt.value > 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) + 3;
-                    selectGame(games[index >= games.length ? index % 3 : index]);
-                } else {
-                    selectGame(games[0]);
-                }
-            } else if (evt.key == "right" || (evt.key == "ax" && evt.value > 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) + 1;
-                    selectGame(games[index >= games.length ? 0 : index]);
-                } else {
-                    selectGame(games[0]);
-                }
-            } else if (evt.key == "left" || (evt.key == "ax" && evt.value < 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) - 1;
-                    selectGame(games[index < 0 ? games.length - 1 : index]);
-                } else {
-                    selectGame(games[games.length - 1]);
-                }
-            } else if (evt.key == "up" || (evt.key == "ay" && evt.value < 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) - 3;
-                    selectGame(games[index < 0 ? (games.length + (3 - (games.length % 3))) + index : index]);
-                } else {
-                    selectGame(games[games.length - 1]);
-                }
-            }
-        }
-    }, [evt]);
-
-    useInput({
-        "left": { keyCode: "ArrowLeft" },
-        "right": { keyCode: "ArrowRight" },
-        "up": { keyCode: "ArrowUp" },
-        "down": { keyCode: "ArrowDown" },
-        "ax": { analogAxis: 0 },
-        "ay": { analogAxis: 1 },
-        "home": { keyCode: "Escape", buttonIndex: 11 },
-        "j": { keyCode: "j", buttonIndex: 3 },
-        "k": { keyCode: "k", buttonIndex: 4 },
-        "l": { keyCode: "l", buttonIndex: 1 },
-    }, (evt) => {
-        console.log(evt);
-        setEvt(evt);
-    }, true);
+    function onGamePadEvent(event) {
+        console.log(event);
+        setEvt(event);
+    }
 
     return (
         <React.Fragment>
@@ -173,26 +211,27 @@ function Home() {
                 <Typography variant="subtitle1" gutterBottom>
                     Add your games at:  https://imgdhub.wpi.edu/app/arcade
                 </Typography>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", justifyContent: "center", alignItems: "center" }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${COLUMN_SIZE}, 1fr)`, justifyContent: "center", alignItems: "center" }}>
                     {loading && <div className='lds-dual-ring'></div>}
                     {games.map(g => {
-
                         const canvas2d = document.createElement("canvas").getContext('2d');
                         const cover = document.createElement("img");
                         cover.crossOrigin = "Anonymous";
                         // document.body.append(cover)
                         cover.src = g.cover;
                         canvas2d.drawImage(cover, 0, 0);
-                        const rgb = canvas2d.getImageData(0, 0, 1, 1).data;
-
-                        const coverColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+                        
+                        // const rgb = canvas2d.getImageData(0, 0, 1, 1).data;
+                        // const coverColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
 
                         return <div key={g.embed} style={{ width: "100%", minHeight: 400, padding: "5%" }}>
                             <Button variant="contained"
-                                color={selectedGame && g.embed == selectedGame.embed ? "secondary" : "primary"}
+                                color={g == selectedGame ? "secondary" : "primary"}
                                 id={`game-${g.embed}`}
-                                onMouseOver={() => setSelectedGame(g)}
-                                onMouseOut={() => setSelectedGame(null)}
+
+                                // NOTE: hovering the causes the selected-color to be darker.
+                                onMouseEnter={() => selectGame(g)}
+                                onMouseLeave={() => selectGame(null)}
                                 style={{ display: "flex", flexDirection: "column", gap: 15, padding: 15, paddingTop: 15, paddingBottom: 15 }}
                                 href={gameUrl(g)}>
                                 <span style={{
