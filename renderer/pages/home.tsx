@@ -36,7 +36,7 @@ const
         "l": { keyCode: "l", buttonIndex: 1 },
     };
 
-const isProd: boolean = process.env.NODE_ENV === 'production';
+const IS_PROD: boolean = process.env.NODE_ENV === 'production';
 
 const Root = styled('div')(({ theme }) => {
     return {
@@ -45,11 +45,11 @@ const Root = styled('div')(({ theme }) => {
     };
 })
 
-const gameUrl = (game: any) => {
+function gameUrl(game: any) {
     const params = new URLSearchParams();
     if (game.gameId) params.append('gameId', game.gameId);
     if (game.embed) params.append('embed', game.embed);
-    return isProd ? `app://./game.html?${params.toString()}` : `/game?${params.toString()}`;
+    return IS_PROD ? `app://./game.html?${params.toString()}` : `/game?${params.toString()}`;
 }
 
 function Home() {
@@ -61,32 +61,44 @@ function Home() {
     const [selectedGame, setSelectedGame] = useState(null);
     const [games, setGames] = useState([]);
     const [evt, setEvt] = useState({ key: "", value: -1 });
+    const [scrollHomeTimer, setScrollHomeTimer] = useState(-1);
 
     // After document initialization
-    useEffect(() => {
-        window.addEventListener("scrollend", resetScrollHomeTimer);
-        fetchGames();
-    }, []);
+    useEffect(onInitialize, []);
 
-    useEffect(onGamesChanged, [games.length]); // Game change
     useEffect(onInputEvent, [evt]); // Input Event Handling
 
-    useInput(GAME_PAD_KEYBINDS, onGamePadEvent, true);// Game-Pad Event
+    useEffect(resetScrollHomeTimer, [selectedGame]);
+
+    useInput(GAME_PAD_KEYBINDS, onGamePadEvent, true); // Game-Pad Event
 
     async function fetchGames() {
         setLoading(true);
-        try {
-            const q = query(collection(db, "/games"));
-            const docs = await getDocs(q);
-            const fetchedGames = docs.docs.map(doc => doc.data());
-            setGames(fetchedGames);
-        } finally {
-            setLoading(false);
-        }
+        const q = query(collection(db, "/games"));
+        const docs = await getDocs(q);
+        const fetchedGames = docs.docs.map(doc => doc.data());
+
+        // If the gameslist is empty, error
+        if(fetchedGames.length == 0)
+            throw new Error("Game list is empty");
+
+        setGames(fetchedGames);
+  
+        setLoading(false);
     }
 
+    function resetScrollHomeTimer() {
+        window.clearTimeout(scrollHomeTimer);
+
+        setScrollHomeTimer(window.setTimeout(
+            window.scrollTo,
+            SCROLL_HOME_DELAY,
+            { top: 0, behavior: "smooth" }
+        ));
+    };
+
     function selectGame(game: any | number) {
-        // Turn to a game if it is an index value
+        // Game the game if given an index number
         if(typeof game === "number")
             game = games[((game % games.length) + games.length) % games.length]; // Mods to a positive number
 
@@ -94,28 +106,26 @@ function Home() {
 
         try { document.getElementById(`game-${game.embed}`).focus(); }
         catch (e) { console.error(e); }
-        finally { resetScrollHomeTimer(); }
     }
 
-    let scrollHomeTime: number = -1;
-    function resetScrollHomeTimer() {
-        clearTimeout(scrollHomeTime);
+    function onInitialize() {
+        addEventListener("scrollend", resetScrollHomeTimer);
 
-        scrollHomeTime = window.setTimeout(
-            window.scrollTo,
-            SCROLL_HOME_DELAY,
-            { top: 0, behavior: "smooth" }
-        );
-    };
+        // Repeats fetchGames until a non-empty list is received
+        let fetchGamesUntilSuccess: ()=>void = () => fetchGames().catch(async e => {
+            console.warn(e);
 
+            await new Promise(res => setTimeout(res, 15000));
 
-    //// Event Handlers ////
-    function onGamesChanged() {
-        if (games.length > 0) return;
+            fetchGamesUntilSuccess();
+        });
+        fetchGamesUntilSuccess();
 
-        const intervalId = setInterval(fetchGames, 15000);
+        return () => {
+            removeEventListener("scrollend", resetScrollHomeTimer);
 
-        return () => clearInterval(intervalId);
+            fetchGamesUntilSuccess = () => {};
+        }
     }
 
     function onInputEvent() {        
@@ -230,8 +240,8 @@ function Home() {
                                 id={`game-${g.embed}`}
 
                                 // NOTE: hovering the causes the selected-color to be darker.
-                                onMouseEnter={() => selectGame(g)}
-                                onMouseLeave={() => selectGame(null)}
+                                onMouseMove={() => setSelectedGame(g)}
+
                                 style={{ display: "flex", flexDirection: "column", gap: 15, padding: 15, paddingTop: 15, paddingBottom: 15 }}
                                 href={gameUrl(g)}>
                                 <span style={{
