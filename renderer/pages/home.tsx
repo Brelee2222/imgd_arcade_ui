@@ -34,9 +34,9 @@ const
         "j": { keyCode: "j", buttonIndex: 3 },
         "k": { keyCode: "k", buttonIndex: 4 },
         "l": { keyCode: "l", buttonIndex: 1 },
-    };
+    },
 
-const IS_PROD: boolean = process.env.NODE_ENV === 'production';
+    IS_PROD: boolean = process.env.NODE_ENV === 'production';
 
 const Root = styled('div')(({ theme }) => {
     return {
@@ -53,25 +53,25 @@ function gameUrl(game: any) {
 }
 
 function Home() {
-    // const router = useRouter();
-    // const handleClose = () => setOpen(false);
-    // const handleClick = () => setOpen(true);
-    // const [open, setOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
     const [selectedGame, setSelectedGame] = useState(null);
     const [games, setGames] = useState([]);
     const [evt, setEvt] = useState({ key: "", value: -1 });
     const [scrollHomeTimer, setScrollHomeTimer] = useState(-1);
+    // const router = useRouter();
+    // const handleClose = () => setOpen(false);
+    // const handleClick = () => setOpen(true);
+    // const [open, setOpen] = React.useState(false);
 
-    // After document initialization
+    // Initialization
     useEffect(onInitialize, []);
 
-    useEffect(onInputEvent, [evt]); // Input Event Handling
-
-    useEffect(resetScrollHomeTimer, [selectedGame]);
-
+    // Event Handling
+    useEffect(onInputEvent, [evt]); // Input event
+    useEffect(resetScrollHomeTimer, [selectedGame]); // Selected game changed event
     useInput(GAME_PAD_KEYBINDS, onGamePadEvent, true); // Game-Pad Event
 
+    //// Functions ////
     async function fetchGames() {
         setLoading(true);
         const q = query(collection(db, "/games"));
@@ -88,19 +88,23 @@ function Home() {
     }
 
     function resetScrollHomeTimer() {
+        // Clear the current timer
         window.clearTimeout(scrollHomeTimer);
 
+        // Set a new timer
         setScrollHomeTimer(window.setTimeout(
-            window.scrollTo,
+            () => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                setSelectedGame(null);
+            },
             SCROLL_HOME_DELAY,
-            { top: 0, behavior: "smooth" }
         ));
     };
 
     function selectGame(game: any | number) {
         // Game the game if given an index number
         if(typeof game === "number")
-            game = games[((game % games.length) + games.length) % games.length]; // Mods to a positive number
+            game = games[((game % games.length) + games.length) % games.length] ?? game[0]; // Mods to a positive number
 
         setSelectedGame(game);
 
@@ -129,9 +133,14 @@ function Home() {
     }
 
     function onInputEvent() {        
-        const gameIndex = selectedGame ? games.indexOf(selectedGame) : 0;
+        if(!selectedGame) {
+            selectGame(0);
+            return;
+        }
 
-        const keyValue = `${evt.key} ${evt.value}`
+        const gameIndex = games.indexOf(selectedGame);
+
+        const keyValue = `${evt.key} ${evt.value}`;
 
         switch (keyValue) {
             case "l 1":
@@ -240,7 +249,7 @@ function Home() {
                                 id={`game-${g.embed}`}
 
                                 // NOTE: hovering the causes the selected-color to be darker.
-                                onMouseMove={() => setSelectedGame(g)}
+                                onMouseMove={() => selectGame(g)}
 
                                 style={{ display: "flex", flexDirection: "column", gap: 15, padding: 15, paddingTop: 15, paddingBottom: 15 }}
                                 href={gameUrl(g)}>
