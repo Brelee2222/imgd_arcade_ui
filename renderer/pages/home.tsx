@@ -241,7 +241,7 @@ function Home() {
                         canvas2d.drawImage(cover, 0, 0);
                         
                         // const rgb = canvas2d.getImageData(0, 0, 1, 1).data;
-                        // const coverColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+                        // const coverColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; 
 
                         return <div key={g.embed} style={{ width: "100%", minHeight: 400, padding: "5%" }}>
                             <Button variant="contained"
