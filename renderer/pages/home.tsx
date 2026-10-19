@@ -88,9 +88,6 @@ function Home() {
     }
 
     function resetScrollHomeTimer() {
-        // Clear the current timer
-        window.clearTimeout(scrollHomeTimer);
-
         // Set a new timer
         setScrollHomeTimer(window.setTimeout(
             () => {
@@ -99,12 +96,15 @@ function Home() {
             },
             SCROLL_HOME_DELAY,
         ));
+
+        // Cleanup
+        return () => window.clearTimeout(scrollHomeTimer);
     };
 
     function selectGame(game: any | number) {
         // Game the game if given an index number
         if(typeof game === "number")
-            game = games[((game % games.length) + games.length) % games.length] ?? game[0]; // Mods to a positive number
+            game = games[((game % games.length) + games.length) % games.length] ?? games[0]; // Mods to a positive number
 
         setSelectedGame(game);
 
@@ -113,21 +113,20 @@ function Home() {
     }
 
     function onInitialize() {
-        addEventListener("scrollend", resetScrollHomeTimer);
 
-        // Repeats fetchGames until a non-empty list is received
+        let waitTime = 15000;
+        // Only repeats when the last fetch was unsuccessful
         let fetchGamesUntilSuccess: ()=>void = () => fetchGames().catch(async e => {
             console.warn(e);
 
-            await new Promise(res => setTimeout(res, 15000));
+            await new Promise(res => setTimeout(res, waitTime));
+            waitTime *= 1.1; // Increase the wait time
 
             fetchGamesUntilSuccess();
         });
         fetchGamesUntilSuccess();
 
         return () => {
-            removeEventListener("scrollend", resetScrollHomeTimer);
-
             fetchGamesUntilSuccess = () => {};
         }
     }
@@ -245,7 +244,7 @@ function Home() {
 
                         return <div key={g.embed} style={{ width: "100%", minHeight: 400, padding: "5%" }}>
                             <Button variant="contained"
-                                color={g == selectedGame ? "secondary" : "primary"}
+                                color={g.gameId === selectedGame?.gameId ? "secondary" : "primary"}
                                 id={`game-${g.embed}`}
 
                                 // NOTE: hovering the causes the selected-color to be darker.
