@@ -103,15 +103,8 @@ function Home() {
 
     function selectGame(game: any | number) {
         // Game the game if given an index number
-        if(typeof game === "number") {
-            if(game < 0)
-                game = ((game - games.length % 3) + 6) % 3 + (games.length - 3);
-            
-            else if(game >= games.length)
-                game %= 3;
-
+        if(typeof game === "number")
             game = games[game] ?? games[0]; // Mods to a positive number
-        }
 
         setSelectedGame(game);
 
@@ -158,25 +151,29 @@ function Home() {
             case "down 1":
             case "s 1":
             case "ay 1":
-                selectGame(gameIndex + COLUMN_SIZE);
+                selectGame(Math.floor((gameIndex + COLUMN_SIZE) % games.length / 3) * 3 + gameIndex%3);
                 break;
 
             case "right 1":
             case "d 1":
             case "ax 1":
-                selectGame(gameIndex + 1);
+                selectGame((gameIndex + 1) % games.length);
                 break;
 
             case "left 1":
             case "a 1":
             case "ax -1":
-                selectGame(gameIndex - 1);
+                selectGame((gameIndex - 1 + games.length) % games.length);
                 break;
 
             case "up 1":
             case "w 1":
             case "ay -1":
-                selectGame(gameIndex - COLUMN_SIZE);
+                console.log(games.length + (((gameIndex - games.length % 3) + 3) % 3))
+                selectGame(gameIndex < COLUMN_SIZE ? 
+                    games.length - 3 + (((gameIndex - games.length % 3) + 3) % 3):
+                    gameIndex - COLUMN_SIZE
+                );
                 break;
         }
     }
