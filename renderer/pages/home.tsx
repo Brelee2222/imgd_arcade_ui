@@ -110,7 +110,7 @@ function Home() {
             else if(game >= games.length)
                 game %= 3;
 
-            game = games[((game % games.length) + games.length) % games.length] ?? games[0]; // Mods to a positive number
+            game = games[game] ?? games[0]; // Mods to a positive number
         }
 
         setSelectedGame(game);
