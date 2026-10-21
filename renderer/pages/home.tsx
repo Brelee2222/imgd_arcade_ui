@@ -103,8 +103,15 @@ function Home() {
 
     function selectGame(game: any | number) {
         // Game the game if given an index number
-        if(typeof game === "number")
+        if(typeof game === "number") {
+            if(game < 0)
+                game = ((game - games.length % 3) + 6) % 3 + (games.length - 3);
+            
+            else if(game >= games.length)
+                game %= 3;
+
             game = games[((game % games.length) + games.length) % games.length] ?? games[0]; // Mods to a positive number
+        }
 
         setSelectedGame(game);
 
