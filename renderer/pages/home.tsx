@@ -169,7 +169,6 @@ function Home() {
             case "up 1":
             case "w 1":
             case "ay -1":
-                console.log(games.length + (((gameIndex - games.length % 3) + 3) % 3))
                 selectGame(gameIndex < COLUMN_SIZE ? 
                     games.length - 3 + (((gameIndex - games.length % 3) + 3) % 3):
                     gameIndex - COLUMN_SIZE
