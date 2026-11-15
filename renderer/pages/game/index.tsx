@@ -11,7 +11,7 @@ const GamePage: NextPage = () => {
   const embed: string = ""+router.query.embed;
 
   const [delay, setDelay] = useState<NodeJS.Timeout | undefined>(undefined);
-  const [timeLeft, setTimeLeft] = useState<number>(new Date().getTime());
+  const [timeLeft, setTimeLeft] = useState<number>(5000);
   const [evt, setEvt] = useState({value: 0});
 
   // 5s timer for holding down esc to return to menu + debug message
@@ -53,7 +53,7 @@ const GamePage: NextPage = () => {
     </style>
     <div style={{ width: "100vw", height: "100vh", backgroundColor: "#333333" }}>
       <p style={{ paddingLeft: 160, paddingTop: 15 }}>
-        Hold top left button for {!!delay ? <b>{timeLeft.toFixed(1)}</b> : " 5 "} seconds to go return to game selection screen
+        Hold top left button for {delay ? <b>{(timeLeft/1000).toFixed(1)}</b> : " 5 "} seconds to go return to game selection screen
       </p>
 
       {embed ? (

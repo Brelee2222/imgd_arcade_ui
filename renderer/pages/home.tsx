@@ -2,14 +2,40 @@ import { styled } from '@mui/material';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Head from 'next/head';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import useInput from "../components/GamepadAPI";
 import { db } from '../lib/fb';
-import { useRouter } from 'next/router';
 import { collection, getDocs, query } from 'firebase/firestore';
 
-const isProd: boolean = process.env.NODE_ENV === 'production';
+const
+    COLUMN_SIZE = 3,
+    SCROLL_HOME_DELAY = 15000,
+    GAME_PAD_KEYBINDS = {
+        // Arrow Keys (up and down end up scrolling the page as well)
+        "left": { keyCode: "ArrowLeft" },
+        "right": { keyCode: "ArrowRight" },
+        "up": { keyCode: "ArrowUp" },
+        "down": { keyCode: "ArrowDown" },
+
+        // WASD
+        "a": { keyCode: "a" },
+        "d": { keyCode: "d" },
+        "w": { keyCode: "w" },
+        "s": { keyCode: "s" },
+
+        // Joystick Axes
+        "ax": { analogAxis: 0 },
+        "ay": { analogAxis: 1 },
+
+        // Buttons
+        "home": { keyCode: "Escape", buttonIndex: 11 },
+        "j": { keyCode: "j", buttonIndex: 3 },
+        "k": { keyCode: "k", buttonIndex: 4 },
+        "l": { keyCode: "l", buttonIndex: 1 },
+    },
+
+    IS_PROD: boolean = process.env.NODE_ENV === 'production';
 
 const Root = styled('div')(({ theme }) => {
     return {
@@ -18,110 +44,140 @@ const Root = styled('div')(({ theme }) => {
     };
 })
 
-const gameUrl = (game: any) => {
+function gameUrl(game: any) {
     const params = new URLSearchParams();
     if (game.gameId) params.append('gameId', game.gameId);
     if (game.embed) params.append('embed', game.embed);
-    return isProd ? `app://./game.html?${params.toString()}` : `/game?${params.toString()}`;
+    return IS_PROD ? `app://./game.html?${params.toString()}` : `/game?${params.toString()}`;
 }
 
 function Home() {
-    const router = useRouter();
-    const [open, setOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
-    const handleClose = () => setOpen(false);
-    const handleClick = () => setOpen(true);
-    const [games, setGames] = useState([]);
     const [selectedGame, setSelectedGame] = useState(null);
+    const [games, setGames] = useState([]);
     const [evt, setEvt] = useState({ key: "", value: -1 });
+    const scrollHomeTimer = useRef<number | undefined>(undefined);
 
-    const fetchGames = async () => {
+    // Initialization
+    useEffect(onInitialize, []);
+
+    // Event Handling
+    useEffect(onInputEvent, [evt]); // Input event
+    useEffect(resetScrollHomeTimer, [selectedGame]); // Selected game changed event
+    useInput(GAME_PAD_KEYBINDS, onGamePadEvent, true); // Game-Pad Event
+
+    //// Functions ////
+    async function fetchGames() {
         setLoading(true);
         try {
             const q = query(collection(db, "/games"));
             const docs = await getDocs(q);
             const fetchedGames = docs.docs.map(doc => doc.data());
+
+            // If the gameslist is empty, error
+            if(fetchedGames.length == 0)
+                throw new Error("Game list is empty");
+
             setGames(fetchedGames);
         } finally {
             setLoading(false);
         }
     }
 
-    useEffect(() => {
-        fetchGames();
-    }, []);
+    function resetScrollHomeTimer() {
+        // Set a new timer
+        scrollHomeTimer.current = window.setTimeout(
+            () => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                setSelectedGame(null);
+            },
+            SCROLL_HOME_DELAY,
+        );
 
-    useEffect(() => {
-        if (games.length > 0) return;
+        // Cleanup
+        return () => window.clearTimeout(scrollHomeTimer.current);
+    };
 
-        const intervalId = setInterval(() => {
-            fetchGames();
-        }, 15000);
+    function selectGame(game: any | number) {
+        // Game the game if given an index number
+        if(typeof game === "number")
+            game = games[game] ?? games[0]; // Mods to a positive number
 
-        return () => clearInterval(intervalId);
-    }, [games.length]);
-
-    const selectGame = (game) => {
         setSelectedGame(game);
-        try {
-            document.getElementById(`game-${game.embed}`).focus();
-        } catch (e) {
-            console.error(e);
+
+        try { document.getElementById(`game-${game.embed}`).focus(); }
+        catch (e) { console.error(e); }
+    }
+
+    function onInitialize() {
+
+        let waitTime = 15000;
+        // Only repeats when the last fetch was unsuccessful
+        let fetchGamesUntilSuccess: ()=>void = () => fetchGames().catch(async e => {
+            console.warn(e);
+
+            await new Promise(res => setTimeout(res, waitTime));
+            waitTime *= 1.1; // Increase the wait time
+
+            fetchGamesUntilSuccess();
+        });
+        fetchGamesUntilSuccess();
+
+        return () => {
+            fetchGamesUntilSuccess = () => {};
         }
     }
 
-    useEffect(() => {
-        // Button down
-        if (Math.abs(evt.value) == 1) {
-            if ((evt.key == "k" || evt.key == "l") && !!selectedGame) {
-                window.location.href = gameUrl(selectedGame);
-            } else if (evt.key == "down" || (evt.key == "ay" && evt.value > 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) + 3;
-                    selectGame(games[index >= games.length ? index % 3 : index]);
-                } else {
-                    selectGame(games[0]);
-                }
-            } else if (evt.key == "right" || (evt.key == "ax" && evt.value > 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) + 1;
-                    selectGame(games[index >= games.length ? 0 : index]);
-                } else {
-                    selectGame(games[0]);
-                }
-            } else if (evt.key == "left" || (evt.key == "ax" && evt.value < 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) - 1;
-                    selectGame(games[index < 0 ? games.length - 1 : index]);
-                } else {
-                    selectGame(games[games.length - 1]);
-                }
-            } else if (evt.key == "up" || (evt.key == "ay" && evt.value < 0)) {
-                if (!!selectedGame) {
-                    const index = games.indexOf(selectedGame) - 3;
-                    selectGame(games[index < 0 ? (games.length + (3 - (games.length % 3))) + index : index]);
-                } else {
-                    selectGame(games[games.length - 1]);
-                }
-            }
+    function onInputEvent() {
+        if(!selectedGame) {
+            selectGame(0);
+            return;
         }
-    }, [evt]);
 
-    useInput({
-        "left": { keyCode: "ArrowLeft" },
-        "right": { keyCode: "ArrowRight" },
-        "up": { keyCode: "ArrowUp" },
-        "down": { keyCode: "ArrowDown" },
-        "ax": { analogAxis: 0 },
-        "ay": { analogAxis: 1 },
-        "home": { keyCode: "Escape", buttonIndex: 11 },
-        "j": { keyCode: "j", buttonIndex: 3 },
-        "k": { keyCode: "k", buttonIndex: 4 },
-        "l": { keyCode: "l", buttonIndex: 1 },
-    }, (evt) => {
-        console.log(evt);
-        setEvt(evt);
-    }, true);
+        const gameIndex = games.indexOf(selectedGame);
+
+        const keyValue = `${evt.key} ${evt.value}`;
+
+        switch (keyValue) {
+            case "l 1":
+            case "k 1":
+                if(selectedGame)
+                    window.location.href = gameUrl(selectedGame);
+                break;
+
+            case "down 1":
+            case "s 1":
+            case "ay 1":
+                selectGame(Math.floor((gameIndex + COLUMN_SIZE) % games.length / COLUMN_SIZE) * COLUMN_SIZE + gameIndex % COLUMN_SIZE);
+                break;
+
+            case "right 1":
+            case "d 1":
+            case "ax 1":
+                selectGame((gameIndex + 1) % games.length);
+                break;
+
+            case "left 1":
+            case "a 1":
+            case "ax -1":
+                selectGame((gameIndex - 1 + games.length) % games.length);
+                break;
+
+            case "up 1":
+            case "w 1":
+            case "ay -1":
+                selectGame(gameIndex < COLUMN_SIZE ?
+                    games.length - COLUMN_SIZE + (((gameIndex - games.length % COLUMN_SIZE) + COLUMN_SIZE) % COLUMN_SIZE):
+                    gameIndex - COLUMN_SIZE
+                );
+                break;
+        }
+    }
+
+    function onGamePadEvent(event) {
+        console.log(event);
+        setEvt(event);
+    }
 
     return (
         <React.Fragment>
@@ -173,26 +229,17 @@ function Home() {
                 <Typography variant="subtitle1" gutterBottom>
                     Add your games at:  https://imgdhub.wpi.edu/app/arcade
                 </Typography>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", justifyContent: "center", alignItems: "center" }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${COLUMN_SIZE}, 1fr)`, justifyContent: "center", alignItems: "center" }}>
                     {loading && <div className='lds-dual-ring'></div>}
                     {games.map(g => {
-
-                        const canvas2d = document.createElement("canvas").getContext('2d');
-                        const cover = document.createElement("img");
-                        cover.crossOrigin = "Anonymous";
-                        // document.body.append(cover)
-                        cover.src = g.cover;
-                        canvas2d.drawImage(cover, 0, 0);
-                        const rgb = canvas2d.getImageData(0, 0, 1, 1).data;
-
-                        const coverColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-
                         return <div key={g.embed} style={{ width: "100%", minHeight: 400, padding: "5%" }}>
                             <Button variant="contained"
-                                color={selectedGame && g.embed == selectedGame.embed ? "secondary" : "primary"}
+                                color={g.gameId === selectedGame?.gameId ? "secondary" : "primary"}
                                 id={`game-${g.embed}`}
-                                onMouseOver={() => setSelectedGame(g)}
-                                onMouseOut={() => setSelectedGame(null)}
+
+                                // NOTE: hovering the causes the selected-color to be darker.
+                                onMouseMove={() => selectGame(g)}
+
                                 style={{ display: "flex", flexDirection: "column", gap: 15, padding: 15, paddingTop: 15, paddingBottom: 15 }}
                                 href={gameUrl(g)}>
                                 <span style={{
@@ -212,7 +259,7 @@ function Home() {
                         </div>
                     }
                     )}
-                    {games.length <= 0 && <Typography variant="h5">
+                    {!loading && games.length <= 0 && <Typography variant="h5">
                         <br /><br />
                         No Games Available
                         <br /><br />
