@@ -11,7 +11,7 @@ const GamePage: NextPage = () => {
   const embed: string = ""+router.query.embed;
 
   const [delay, setDelay] = useState<NodeJS.Timeout | undefined>(undefined);
-  const [timeLeft, setTimeLeft] = useState<number>(new Date().getTime());
+  const [timeLeft, setTimeLeft] = useState<number>(5000);
   const [evt, setEvt] = useState({value: 0});
 
   // 5s timer for holding down esc to return to menu + debug message

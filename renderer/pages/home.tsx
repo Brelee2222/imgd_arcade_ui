@@ -2,16 +2,15 @@ import { styled } from '@mui/material';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Head from 'next/head';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import useInput from "../components/GamepadAPI";
 import { db } from '../lib/fb';
-import { useRouter } from 'next/router';
 import { collection, getDocs, query } from 'firebase/firestore';
 
-const 
+const
     COLUMN_SIZE = 3,
-    SCROLL_HOME_DELAY = 30000,
+    SCROLL_HOME_DELAY = 15000,
     GAME_PAD_KEYBINDS = {
         // Arrow Keys (up and down end up scrolling the page as well)
         "left": { keyCode: "ArrowLeft" },
@@ -57,11 +56,7 @@ function Home() {
     const [selectedGame, setSelectedGame] = useState(null);
     const [games, setGames] = useState([]);
     const [evt, setEvt] = useState({ key: "", value: -1 });
-    const [scrollHomeTimer, setScrollHomeTimer] = useState(-1);
-    // const router = useRouter();
-    // const handleClose = () => setOpen(false);
-    // const handleClick = () => setOpen(true);
-    // const [open, setOpen] = React.useState(false);
+    const scrollHomeTimer = useRef<number | undefined>(undefined);
 
     // Initialization
     useEffect(onInitialize, []);
@@ -74,31 +69,33 @@ function Home() {
     //// Functions ////
     async function fetchGames() {
         setLoading(true);
-        const q = query(collection(db, "/games"));
-        const docs = await getDocs(q);
-        const fetchedGames = docs.docs.map(doc => doc.data());
+        try {
+            const q = query(collection(db, "/games"));
+            const docs = await getDocs(q);
+            const fetchedGames = docs.docs.map(doc => doc.data());
 
-        // If the gameslist is empty, error
-        if(fetchedGames.length == 0)
-            throw new Error("Game list is empty");
+            // If the gameslist is empty, error
+            if(fetchedGames.length == 0)
+                throw new Error("Game list is empty");
 
-        setGames(fetchedGames);
-  
-        setLoading(false);
+            setGames(fetchedGames);
+        } finally {
+            setLoading(false);
+        }
     }
 
     function resetScrollHomeTimer() {
         // Set a new timer
-        setScrollHomeTimer(window.setTimeout(
+        scrollHomeTimer.current = window.setTimeout(
             () => {
                 window.scrollTo({ top: 0, behavior: "smooth" });
                 setSelectedGame(null);
             },
             SCROLL_HOME_DELAY,
-        ));
+        );
 
         // Cleanup
-        return () => window.clearTimeout(scrollHomeTimer);
+        return () => window.clearTimeout(scrollHomeTimer.current);
     };
 
     function selectGame(game: any | number) {
@@ -131,7 +128,7 @@ function Home() {
         }
     }
 
-    function onInputEvent() {        
+    function onInputEvent() {
         if(!selectedGame) {
             selectGame(0);
             return;
@@ -151,7 +148,7 @@ function Home() {
             case "down 1":
             case "s 1":
             case "ay 1":
-                selectGame(Math.floor((gameIndex + COLUMN_SIZE) % games.length / 3) * 3 + gameIndex%3);
+                selectGame(Math.floor((gameIndex + COLUMN_SIZE) % games.length / COLUMN_SIZE) * COLUMN_SIZE + gameIndex % COLUMN_SIZE);
                 break;
 
             case "right 1":
@@ -169,8 +166,8 @@ function Home() {
             case "up 1":
             case "w 1":
             case "ay -1":
-                selectGame(gameIndex < COLUMN_SIZE ? 
-                    games.length - 3 + (((gameIndex - games.length % 3) + 3) % 3):
+                selectGame(gameIndex < COLUMN_SIZE ?
+                    games.length - COLUMN_SIZE + (((gameIndex - games.length % COLUMN_SIZE) + COLUMN_SIZE) % COLUMN_SIZE):
                     gameIndex - COLUMN_SIZE
                 );
                 break;
@@ -235,16 +232,6 @@ function Home() {
                 <div style={{ display: "grid", gridTemplateColumns: `repeat(${COLUMN_SIZE}, 1fr)`, justifyContent: "center", alignItems: "center" }}>
                     {loading && <div className='lds-dual-ring'></div>}
                     {games.map(g => {
-                        const canvas2d = document.createElement("canvas").getContext('2d');
-                        const cover = document.createElement("img");
-                        cover.crossOrigin = "Anonymous";
-                        // document.body.append(cover)
-                        cover.src = g.cover;
-                        canvas2d.drawImage(cover, 0, 0);
-                        
-                        // const rgb = canvas2d.getImageData(0, 0, 1, 1).data;
-                        // const coverColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-
                         return <div key={g.embed} style={{ width: "100%", minHeight: 400, padding: "5%" }}>
                             <Button variant="contained"
                                 color={g.gameId === selectedGame?.gameId ? "secondary" : "primary"}
@@ -272,7 +259,7 @@ function Home() {
                         </div>
                     }
                     )}
-                    {games.length <= 0 && <Typography variant="h5">
+                    {!loading && games.length <= 0 && <Typography variant="h5">
                         <br /><br />
                         No Games Available
                         <br /><br />
