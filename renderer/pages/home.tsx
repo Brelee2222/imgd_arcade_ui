@@ -78,6 +78,17 @@ function Home() {
             if(fetchedGames.length == 0)
                 throw new Error("Game list is empty");
 
+            // shuffle games
+            for(const index in fetchedGames) {
+                const temp = fetchedGames[index];
+
+                const randomIndex = Math.random() * fetchedGames.length;
+
+                fetchedGames[index] = fetchedGames[randomIndex];
+
+                fetchedGames[randomIndex] = temp;
+            }
+
             setGames(fetchedGames);
         } finally {
             setLoading(false);
